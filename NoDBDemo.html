@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.x.axis path {
+  display: none;
+}
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
+
+</style>
+<body>
+<script src="//d3js.org/d3.v3.min.js"></script>
+ <script src="moment.js"> </script>
+<script src="stomp.js"></script>
+<script>
+
+ //Stomp.js boilerplate
+var client = Stomp.client('ws://' + window.location.hostname + ':15674/ws');
+
+var on_connect = function(x) {
+ id = client.subscribe("bge_events", function(d) {    
+ 	updateData(d.body);
+ });
+};
+var on_error =  function() {
+console.log('error');
+};
+client.connect('guest', 'guest', on_connect, on_error, '/');
+
+ // D3 set up 
+
+	var margin = {top: 20, right: 80, bottom: 30, left: 50},
+	    width = 960 - margin.left - margin.right,
+	    height = 500 - margin.top - margin.bottom;
+	//Time stamp as per sample data
+	var parseDate = d3.time.format("%Y-%m-%d %H:%M:%S").parse;
+	
+	var x = d3.time.scale()
+	    .range([0, width]);
+	
+	var y = d3.scale.linear()
+	    .range([height, 0]);
+	
+	var color = d3.scale.category10();
+	
+	var xAxis = d3.svg.axis()
+	    .scale(x)
+	    .orient("bottom");
+	
+	var yAxis = d3.svg.axis()
+	    .scale(y)
+	    .orient("left");
+	
+	var line = d3.svg.line()
+	    .interpolate("basis")
+	    .x(function(d) { return x(d.date); })
+	    .y(function(d) { return y(d.qcvalue); });
+	
+	var svg = d3.select("body").append("svg")
+	    .attr("width", width + margin.left + margin.right)
+	    .attr("height", height + margin.top + margin.bottom)
+	  .append("g")
+	    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+	    //Sample input for testing. This goes to Y axis
+		//var responseText = "43_2141060901,15_214106090,69_2141060000%10_2141060901,5_214106090,40_2141060000%50_2141060901,25_214106090,90_2141060000"
+//Method that actually does the thing
+function updateData(responseText){	
+	var v1 = responseText.split('%');
+	var deyta = [];
+    //Sample incoming dates for X axis. Most of the code below is to structure data. Try to do this in data processing pipe line or at the source itself
+	//var dates = ["2011-07-07 08:00:00","2011-07-08 09:00:00","2011-07-09 10:00:00"];
+	v1.forEach(function(f,indx){
+	   vaark = f.split(',').map(function(elt, i) {
+	      return "\""+elt.split('_')[1]+"\"";
+	  })
+	  vaarc = f.split(',').map(function(elt, i) {
+	        return "\""+elt.split('_')[0]+"\"";
+	  })
+	  vaark = vaark + ","+"\""+"date"+"\"";
+	  //Time as per browser, you may want replace it with injestion time or time of creation if available
+	   vaarc = vaarc + ","+"\""+new Date().toISOString()+"\"";
+    //Dirty code so that d3.csv.parse works :-\
+	deyta.push("'"+vaark+"\\"+"n"+vaarc+"'");  
+	});
+	//Below return statement create an array of which only first element has value. Yeah I know!
+	deyta = deyta.map(function(f){
+	return d3.csv.parse(eval(String(f)));
+	}); 
+	
+	//Now let us iterate through each incoming items
+	deyta.forEach(function(data,inxd) {
+		
+	}
+			color.domain(d3.keys(data[0]).filter(function(key) {
+				return key !== "date";
+			}
+			));
+			 
+			 data.forEach(function(d) {
+			  d.date =  parseDate(d.date);
+			}); 
+		
+		var lotnumbers = color.domain().map(function(name) {
+				return {
+					name : name,
+					values : data.map(function(d) {					
+						return {
+							date : d.date,
+							qcvalue : +d[name]
+						};
+					})
+				};
+			});
+			
+			
+			  y.domain([
+			            d3.min(lotnumbers, function(c) { return d3.min(c.values, function(v) { return v.qcvalue; }); }),
+			            d3.max(lotnumbers, function(c) { return d3.max(c.values, function(v) { return v.qcvalue; }); })
+			          ]);
+	
+			y.domain([ 0, d3.max(lotnumbers, function(c) {return d3.max(c.values, function(v) {	return v.qcvalue;	});	}) ]);
+			
+			svg.append("g").attr("class", "x axis").attr("transform","translate(0," + height + ")").call(xAxis);
+	
+			svg.append("g").attr("class", "y axis").call(yAxis).append("text").attr("transform", "rotate(-90)").attr("y", 6).attr("dy",".71em").style("text-anchor", "end").text("Cases");
+	
+			var individuallotno = svg.selectAll(".individuallotno").data(lotnumbers).enter().append("g").attr("class", "individuallotno");
+	
+			individuallotno.append("path").attr("class", "line").attr("d", function(d) {
+				return line(d.values);
+			}).style("stroke", function(d) {
+				return color(d.name);
+			});
+	
+			individuallotno.append("text").datum(function(d) {
+				return {
+					name : d.name,
+					value : d.values[d.values.length - 1]
+				};
+			}).attr(
+					"transform",
+					function(d) {
+						return "translate(" + x(d.value.date) + ","
+								+ y(d.value.qcvalue) + ")";
+					}).attr("x", 3).attr("dy", ".35em").text(function(d) {
+				return d.name;
+			});
+		}
+	
+</script>
